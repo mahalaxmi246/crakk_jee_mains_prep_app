@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Remove white gap below fixed navbar */
+main > *:first-child {
+  margin-top: 0 !important;
+}
+
+/* Ensure consistent spacing for page content */
+.page-content > *:first-child {
+  margin-top: 0 !important;
+}
