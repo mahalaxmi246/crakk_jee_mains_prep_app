@@ -118,6 +118,16 @@ const ContestTestPage: React.FC = () => {
     localStorage.setItem(`contest_${contestId}_answers`, JSON.stringify(answers));
   }, [answers, contestId]);
 
+  // Auto-open subject for desktop/mobile when currentQuestion changes
+  useEffect(() => {
+    setExpandedSubject(getCurrentSubject());
+    // also keep panel scrolled to show current question
+    setTimeout(() => {
+      const el = panelScrollRef.current?.querySelector(`[data-question="${currentQuestion}"]`) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 80);
+  }, [currentQuestion]);
+
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -468,9 +478,9 @@ const ContestTestPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel - Desktop */}
-        <div className="hidden lg:block w-80 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden">
-          {/* Timer */}
+        {/* Right Panel - Desktop (accordion like mobile) */}
+        <div className="hidden lg:block w-80 bg-white border-l border-gray-200 flex flex-col h-full min-h-0">
+          {/* Sticky header (timer) */}
           <div className="p-6 border-b border-gray-200 flex-shrink-0 sticky top-0 bg-white z-10">
             <div className="text-center">
               <div className="flex items-center justify-center space-x-2 mb-2">
@@ -483,63 +493,82 @@ const ContestTestPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Question Grid */}
-          <div 
-            className="flex-1 overflow-y-scroll p-4 min-h-0" 
-            style={{ scrollbarWidth: 'auto' }}
+          {/* Single scrollable region (same as mobile) */}
+          <div
+            ref={panelScrollRef}
+            className="flex-1 overflow-y-auto p-4 min-h-0"
+            onScroll={handleScroll}
             onKeyDown={handlePanelKeyDown}
             tabIndex={0}
+            role="region"
+            aria-label="Question navigation"
+            style={{ scrollbarWidth: 'auto' }}
           >
             {Object.entries(contestData.subjects).map(([subject, range]) => (
               <div key={subject} className="mb-6">
-                <h3 className="font-semibold text-gray-900 mb-3">{subject}</h3>
-                <div className="grid grid-cols-5 gap-2 mb-3">
-                  {Array.from({ length: range.end - range.start + 1 }, (_, i) => {
-                    const questionNumber = range.start + i;
-                    const state = getQuestionState(questionNumber);
-                    return (
-                      <button
-                        key={questionNumber}
-                        onClick={() => handleQuestionJump(questionNumber)}
-                        data-question={questionNumber}
-                        className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${getQuestionStateColor(state)}`}
-                      >
-                        {questionNumber}
-                      </button>
-                    );
-                  })}
-                </div>
-                
-                {/* Per-subject counters */}
-                <div className="mt-3 mb-4 p-3 bg-gray-50 rounded-lg">
-                  <div className="text-xs text-gray-600 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-1">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Attempted:</span>
+                {/* Accordion button */}
+                <button
+                  onClick={() => setExpandedSubject(expandedSubject === subject ? null : subject)}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-3 hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-purple-500"
+                  aria-expanded={expandedSubject === subject}
+                  aria-controls={`subject-${subject.toLowerCase()}`}
+                >
+                  <h3 className="font-semibold text-gray-900">{subject}</h3>
+                  <ChevronDown size={16} className={`transform transition-transform ${expandedSubject === subject ? 'rotate-180' : ''}`} />
+                </button>
+
+                <div
+                  id={`subject-${subject.toLowerCase()}`}
+                  className={`transition-all duration-200 overflow-hidden ${expandedSubject === subject ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
+                >
+                  <div className="grid grid-cols-5 gap-2 mb-3">
+                    {Array.from({ length: range.end - range.start + 1 }, (_, i) => {
+                      const questionNumber = range.start + i;
+                      const state = getQuestionState(questionNumber);
+                      return (
+                        <button
+                          key={questionNumber}
+                          onClick={() => handleQuestionJump(questionNumber)}
+                          data-question={questionNumber}
+                          className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${getQuestionStateColor(state)}`}
+                          aria-label={`Question ${questionNumber}, ${state}`}
+                        >
+                          {questionNumber}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-3 mb-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span>Attempted:</span>
+                        </div>
+                        <span className="font-medium">{getSubjectStatusCounts(subject).attempted}</span>
                       </div>
-                      <span className="font-medium">{getSubjectStatusCounts(subject).attempted}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-1">
-                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                        <span>Visited:</span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                          <span>Visited:</span>
+                        </div>
+                        <span className="font-medium">{getSubjectStatusCounts(subject).visited}</span>
                       </div>
-                      <span className="font-medium">{getSubjectStatusCounts(subject).visited}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-1">
-                        <div className="w-2 h-2 bg-gray-200 rounded-full"></div>
-                        <span>Unvisited:</span>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-gray-200 rounded-full"></div>
+                          <span>Unvisited:</span>
+                        </div>
+                        <span className="font-medium">{getSubjectStatusCounts(subject).unvisited}</span>
                       </div>
-                      <span className="font-medium">{getSubjectStatusCounts(subject).unvisited}</span>
                     </div>
                   </div>
                 </div>
               </div>
             ))}
-            
-            {/* Overall Totals */}
+
+            {/* Overall totals & legend - same as before */}
             <div className="border-t border-gray-200 pt-4 mb-4">
               <h4 className="font-medium text-gray-900 mb-3">Overall Summary</h4>
               <div className="p-3 bg-blue-50 rounded-lg">
@@ -569,7 +598,6 @@ const ContestTestPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Legend */}
             <div className="border-t border-gray-200 pt-4">
               <h4 className="font-medium text-gray-900 mb-3">Legend</h4>
               <div className="space-y-2 text-xs">
@@ -597,10 +625,16 @@ const ContestTestPage: React.FC = () => {
             onClick={handlePanelClose}
             onKeyDown={handlePanelKeyDown}
           >
+            {/* OUTER DRAWER - this is now the single scrollable element */}
             <div 
-              className="absolute right-0 top-0 h-full w-80 bg-white shadow-xl flex flex-col" 
+              ref={panelScrollRef}
+              className="absolute right-0 top-0 h-full w-80 bg-white shadow-xl flex flex-col overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
               style={{ maxHeight: '100vh' }}
+              tabIndex={0}
+              onKeyDown={handlePanelKeyDown}
+              role="dialog"
+              aria-label="Question panel"
             >
               {/* Sticky Header */}
               <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 bg-white">
@@ -628,19 +662,7 @@ const ContestTestPage: React.FC = () => {
               </div>
 
               {/* Mobile Accordion Subjects */}
-              <div 
-                className="flex-1 overflow-y-scroll p-4" 
-                ref={panelScrollRef} 
-                onScroll={handleScroll} 
-                onKeyDown={handlePanelKeyDown}
-                style={{ 
-                  scrollbarWidth: 'auto',
-                  maxHeight: 'calc(100vh - 200px)' // Account for header and timer
-                }}
-                tabIndex={0}
-                role="region"
-                aria-label="Question navigation"
-              >
+              <div className="p-4">
                 <>
                 {Object.entries(contestData.subjects).map(([subject, range], index) => (
                   <div key={subject} className="mb-6">
@@ -663,23 +685,23 @@ const ContestTestPage: React.FC = () => {
                         expandedSubject === subject ? 'max-h-none opacity-100' : 'max-h-0 opacity-0'
                       }`}
                     >
-                    <div className="grid grid-cols-5 gap-2 mb-3">
-                      {Array.from({ length: range.end - range.start + 1 }, (_, i) => {
-                        const questionNumber = range.start + i;
-                        const state = getQuestionState(questionNumber);
-                        return (
-                          <button
-                            key={questionNumber}
-                            onClick={() => handleQuestionJump(questionNumber)}
-                            data-question={questionNumber}
-                            className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${getQuestionStateColor(state)}`}
-                            aria-label={`Question ${questionNumber}, ${state}`}
-                          >
-                            {questionNumber}
-                          </button>
-                        );
-                      })}
-                    </div>
+                      <div className="grid grid-cols-5 gap-2 mb-3">
+                        {Array.from({ length: range.end - range.start + 1 }, (_, i) => {
+                          const questionNumber = range.start + i;
+                          const state = getQuestionState(questionNumber);
+                          return (
+                            <button
+                              key={questionNumber}
+                              onClick={() => handleQuestionJump(questionNumber)}
+                              data-question={questionNumber}
+                              className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${getQuestionStateColor(state)}`}
+                              aria-label={`Question ${questionNumber}, ${state}`}
+                            >
+                              {questionNumber}
+                            </button>
+                          );
+                        })}
+                      </div>
                         
                         {/* Per-subject counters - Mobile */}
                         <div className="mt-3 mb-4 p-3 bg-gray-50 rounded-lg">
