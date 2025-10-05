@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import Modal from '../ui/Modal';
-import { authHandlers } from '../../lib/authHandlers';
+// src/components/auth/LoginModal.tsx
+import React, { useState } from "react";
+import Modal from "../ui/Modal";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface LoginModalProps {
   open: boolean;
@@ -9,153 +10,91 @@ interface LoginModalProps {
 }
 
 const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onSwitchToSignup }) => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ emailOrUsername: "", password: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [generalError, setGeneralError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const { login } = useAuth();
+
   const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!emailRegex.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const next: Record<string, string> = {};
+    if (!formData.emailOrUsername) next.emailOrUsername = "Email or username is required";
+    if (!formData.password) next.password = "Password is required";
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setGeneralError("");
     if (!validateForm()) return;
 
     setIsLoading(true);
     try {
-      await authHandlers.login({
-        email: formData.email,
-        password: formData.password
-      });
+      await login(formData.emailOrUsername, formData.password);
       onClose();
-      // Reset form
-      setFormData({ email: '', password: '' });
+      setFormData({ emailOrUsername: "", password: "" });
       setErrors({});
-    } catch (error) {
-      console.error('Login error:', error);
-      // Show error to user
-      setErrors({ email: error instanceof Error ? error.message : 'Login failed' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Login failed";
+      if (/invalid|unauthorized/i.test(msg))
+        setErrors({ emailOrUsername: "Invalid credentials" });
+      else setGeneralError(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSubmit(e as any);
-    }
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const handleSwitchToSignup = () => {
-    // Reset form when switching
-    setFormData({ email: '', password: '' });
-    setErrors({});
-    onSwitchToSignup();
-  };
-
   return (
     <Modal open={open} onClose={onClose} title="Log in" canCloseWhileLoading={!isLoading}>
-      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
+      <form onSubmit={handleSubmit}>
         <div className="space-y-4">
-          {/* Email Field */}
           <div>
-            <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
             <input
-              id="login-email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
-                errors.email ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Enter your email"
+              type="text"
+              placeholder="Email or Username"
+              value={formData.emailOrUsername}
+              onChange={(e) => setFormData({ ...formData, emailOrUsername: e.target.value })}
+              className={`w-full px-3 py-2 border rounded-lg ${errors.emailOrUsername ? "border-red-500" : ""}`}
               disabled={isLoading}
             />
-            {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-            )}
-            {errors.email && errors.email.includes('Email not confirmed') && (
-              <p className="mt-1 text-xs text-gray-500">
-                Please check your email inbox (and spam folder) for a confirmation link.
-              </p>
-            )}
-            {errors.email && errors.email.includes('Invalid login credentials') && (
-              <p className="mt-1 text-xs text-gray-500">
-                Please double-check your email and password, or sign up if you don't have an account.
-              </p>
+            {errors.emailOrUsername && (
+              <p className="mt-1 text-sm text-red-600">{errors.emailOrUsername}</p>
             )}
           </div>
 
-          {/* Password Field */}
           <div>
-            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
             <input
-              id="login-password"
               type="password"
+              placeholder="Password"
               value={formData.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
-                errors.password ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="Enter your password"
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className={`w-full px-3 py-2 border rounded-lg ${errors.password ? "border-red-500" : ""}`}
               disabled={isLoading}
             />
-            {errors.password && (
-              <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-            )}
+            {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
           </div>
+
+          {generalError && <p className="text-sm text-red-600">{generalError}</p>}
         </div>
 
-        {/* Actions */}
         <div className="mt-6">
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 disabled:opacity-50"
           >
-            {isLoading ? 'Logging in...' : 'Log in'}
+            {isLoading ? "Logging in..." : "Log in"}
           </button>
         </div>
 
-        {/* Footer */}
-        <div className="mt-6 text-center text-sm text-gray-600">
-          Don't have an account?{' '}
+        <div className="mt-6 text-center text-sm">
+          Don&apos;t have an account?{" "}
           <button
             type="button"
-            onClick={handleSwitchToSignup}
-            className="text-purple-600 hover:text-purple-700 font-medium"
+            onClick={onSwitchToSignup}
+            className="text-purple-600 hover:underline"
             disabled={isLoading}
           >
             Sign up

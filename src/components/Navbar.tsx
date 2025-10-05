@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, LogIn, User, LogOut } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import LoginModal from './auth/LoginModal';
-import SignupModal from './auth/SignupModal';
+// src/components/Navbar.tsx
+import React, { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Menu, X, LogIn, User, LogOut } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import LoginModal from "./auth/LoginModal";
+import SignupModal from "./auth/SignupModal";
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -11,15 +12,24 @@ const Navbar: React.FC = () => {
   const [showSignupModal, setShowSignupModal] = useState(false);
 
   const location = useLocation();
+  const navigate = useNavigate();
 
   const isActive = (path: string) => location.pathname === path;
-  const { user, signOut } = useAuth();
+  const { user, loading, logout } = useAuth();
+
+  // Close modals when user becomes available
+  useEffect(() => {
+    if (user) {
+      setShowLoginModal(false);
+      setShowSignupModal(false);
+    }
+  }, [user]);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 z-50 h-16" style={{ marginBottom: 0, paddingBottom: 0 }}>
+    <nav className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 z-50 h-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Mobile menu button */}
+          {/* Mobile Menu Toggle */}
           <div className="md:hidden">
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -34,12 +44,12 @@ const Navbar: React.FC = () => {
             <h1 className="text-2xl font-bold text-purple-600">Crakk</h1>
           </Link>
 
-          {/* Desktop Navigation */}
+          {/* Desktop Links */}
           <div className="hidden md:flex items-center space-x-8">
             <Link
               to="/"
               className={`transition-colors ${
-                isActive('/') ? 'text-purple-600 font-medium' : 'text-gray-600 hover:text-purple-600'
+                isActive("/") ? "text-purple-600 font-medium" : "text-gray-600 hover:text-purple-600"
               }`}
             >
               Home
@@ -47,7 +57,9 @@ const Navbar: React.FC = () => {
             <Link
               to="/chatbots"
               className={`transition-colors ${
-                location.pathname.startsWith('/chatbots') ? 'text-purple-600 font-medium' : 'text-gray-600 hover:text-purple-600'
+                location.pathname.startsWith("/chatbots")
+                  ? "text-purple-600 font-medium"
+                  : "text-gray-600 hover:text-purple-600"
               }`}
             >
               Chatbots
@@ -55,27 +67,37 @@ const Navbar: React.FC = () => {
             <Link
               to="/contests"
               className={`transition-colors ${
-                isActive('/contests') ? 'text-purple-600 font-medium' : 'text-gray-600 hover:text-purple-600'
+                isActive("/contests")
+                  ? "text-purple-600 font-medium"
+                  : "text-gray-600 hover:text-purple-600"
               }`}
             >
               Contests
             </Link>
           </div>
 
+          {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-6">
-            {user ? (
+            {loading ? (
+              <span className="text-gray-500 text-sm">Loading…</span>
+            ) : user ? (
               <>
-                <Link
-                  to="/profile"
+                <button
+                  onClick={() => navigate("/profile")}
                   className={`flex items-center space-x-2 transition-colors ${
-                    isActive('/profile') ? 'text-purple-600 font-medium' : 'text-gray-600 hover:text-purple-600'
+                    isActive("/profile")
+                      ? "text-purple-600 font-medium"
+                      : "text-gray-600 hover:text-purple-600"
                   }`}
                 >
                   <User size={18} />
                   <span>Profile</span>
-                </Link>
+                </button>
                 <button
-                  onClick={signOut}
+                  onClick={() => {
+                    const confirmed = window.confirm("Are you sure you want to log out?");
+                    if (confirmed) logout();
+                  }}
                   className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
                 >
                   <LogOut size={18} />
@@ -102,27 +124,32 @@ const Navbar: React.FC = () => {
           </div>
         </div>
 
-        {/* Mobile Navigation */}
+        {/* Mobile Menu */}
         {isMenuOpen && (
           <div className="md:hidden border-t border-gray-100 py-4">
             <div className="flex flex-col space-y-4">
               {user ? (
                 <>
-                  <Link
-                    to="/profile"
-                    className={`transition-colors ${
-                      isActive('/profile') ? 'text-purple-600 font-medium' : 'text-gray-600'
-                    }`}
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Profile
-                  </Link>
                   <button
                     onClick={() => {
-                      signOut();
                       setIsMenuOpen(false);
+                      navigate("/profile");
                     }}
-                    className="text-gray-600 hover:text-purple-600 transition-colors text-left"
+                    className={`text-left transition-colors ${
+                      isActive("/profile") ? "text-purple-600 font-medium" : "text-gray-600"
+                    }`}
+                  >
+                    Profile
+                  </button>
+                  <button
+                    onClick={() => {
+                      const confirmed = window.confirm("Are you sure you want to log out?");
+                      if (confirmed) {
+                        logout();
+                        setIsMenuOpen(false);
+                      }
+                    }}
+                    className="text-left text-gray-600 hover:text-purple-600 transition-colors"
                   >
                     Logout
                   </button>
@@ -134,7 +161,7 @@ const Navbar: React.FC = () => {
                       setShowLoginModal(true);
                       setIsMenuOpen(false);
                     }}
-                    className="text-gray-600 hover:text-purple-600 transition-colors text-left"
+                    className="text-left text-gray-600 hover:text-purple-600 transition-colors"
                   >
                     Login
                   </button>
@@ -143,16 +170,17 @@ const Navbar: React.FC = () => {
                       setShowSignupModal(true);
                       setIsMenuOpen(false);
                     }}
-                    className="text-gray-600 hover:text-purple-600 transition-colors text-left"
+                    className="text-left text-gray-600 hover:text-purple-600 transition-colors"
                   >
                     Sign Up
                   </button>
                 </>
               )}
+
               <Link
                 to="/"
                 className={`transition-colors ${
-                  isActive('/') ? 'text-purple-600 font-medium' : 'text-gray-600'
+                  isActive("/") ? "text-purple-600 font-medium" : "text-gray-600"
                 }`}
                 onClick={() => setIsMenuOpen(false)}
               >
@@ -161,7 +189,7 @@ const Navbar: React.FC = () => {
               <Link
                 to="/chatbots"
                 className={`transition-colors ${
-                  isActive('/chatbots') ? 'text-purple-600 font-medium' : 'text-gray-600'
+                  isActive("/chatbots") ? "text-purple-600 font-medium" : "text-gray-600"
                 }`}
                 onClick={() => setIsMenuOpen(false)}
               >
@@ -170,7 +198,7 @@ const Navbar: React.FC = () => {
               <Link
                 to="/contests"
                 className={`transition-colors ${
-                  isActive('/contests') ? 'text-purple-600 font-medium' : 'text-gray-600'
+                  isActive("/contests") ? "text-purple-600 font-medium" : "text-gray-600"
                 }`}
                 onClick={() => setIsMenuOpen(false)}
               >
@@ -184,12 +212,18 @@ const Navbar: React.FC = () => {
         <LoginModal
           open={showLoginModal}
           onClose={() => setShowLoginModal(false)}
-          onSwitchToSignup={() => { setShowLoginModal(false); setShowSignupModal(true); }}
+          onSwitchToSignup={() => {
+            setShowLoginModal(false);
+            setShowSignupModal(true);
+          }}
         />
         <SignupModal
           open={showSignupModal}
           onClose={() => setShowSignupModal(false)}
-          onSwitchToLogin={() => { setShowSignupModal(false); setShowLoginModal(true); }}
+          onSwitchToLogin={() => {
+            setShowSignupModal(false);
+            setShowLoginModal(true);
+          }}
         />
       </div>
     </nav>

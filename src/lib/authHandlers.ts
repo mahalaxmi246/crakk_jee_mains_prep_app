@@ -1,38 +1,95 @@
-const API_URL = "http://127.0.0.1:8000";
+// src/lib/authHandlers.ts
+const API_BASE_URL = "http://127.0.0.1:8000";
 
-async function login({ email, password }: { email: string; password: string }) {
-  const form = new URLSearchParams();
-  form.append("username", email);        // send EMAIL in 'username' field
-  form.append("password", password);
-  form.append("grant_type", "password");
+/** ---- Token helpers (localStorage) ---- */
+const TOKEN_KEY = "access_token";
+export const getAccessToken = () => localStorage.getItem(TOKEN_KEY);
+export const setAccessToken = (t?: string) => {
+  if (t) localStorage.setItem(TOKEN_KEY, t);
+  else localStorage.removeItem(TOKEN_KEY);
+};
 
-  const res = await fetch(`${API_URL}/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form,
-  });
+/** ---- Types ---- */
+export type RegisterPayload = {
+  username: string;
+  email: string;
+  password: string;
+};
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.detail || "Login failed");
-  }
+export type LoginPayload = {
+  emailOrUsername: string;
+  password: string;
+};
 
-  const data = await res.json();
-  localStorage.setItem("access_token", data.access_token);
-  return data;
-}
+export type UserDTO = {
+  id: number;
+  username: string;
+  email: string;
+  class_level?: string | null;
+  stream?: string | null;
+};
 
-async function me() {
-  const token = localStorage.getItem("access_token");
-  const res = await fetch(`${API_URL}/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Not authenticated");
-  return res.json();
-}
+/** ---- API handlers ---- */
+export const authHandlers = {
+  async register(data: RegisterPayload): Promise<UserDTO> {
+    const res = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Registration failed");
+    }
+    return res.json();
+  },
 
-function logout() {
-  localStorage.removeItem("access_token");
-}
+  async login(
+    data: LoginPayload
+  ): Promise<{ access_token?: string; token_type?: string }> {
+    const form = new URLSearchParams();
+    form.append("username", data.emailOrUsername); // backend accepts username OR email
+    form.append("password", data.password);
 
-export const authHandlers = { login, me, logout };
+    const res = await fetch(`${API_BASE_URL}/auth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Invalid credentials");
+    }
+
+    const json = await res.json();
+    // Persist token so /auth/me can succeed
+    if (json?.access_token) setAccessToken(json.access_token);
+    return json;
+  },
+
+  async logout(): Promise<boolean> {
+    // Best-effort server logout; always clear local token.
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      setAccessToken(undefined);
+    }
+    return true;
+  },
+
+  async getUser(): Promise<UserDTO | null> {
+    const token = getAccessToken();
+    const res = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: "GET",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) return null;
+    return res.json();
+  },
+};
