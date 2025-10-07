@@ -25,6 +25,15 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onSwitchToSignup
     return Object.keys(next).length === 0;
   };
 
+  const handleChange =
+    (key: "emailOrUsername" | "password") =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setFormData((s) => ({ ...s, [key]: e.target.value }));
+      // clear field-specific error while typing
+      if (errors[key]) setErrors((err) => ({ ...err, [key]: "" }));
+      if (generalError) setGeneralError("");
+    };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError("");
@@ -38,9 +47,11 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onSwitchToSignup
       setErrors({});
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Login failed";
-      if (/invalid|unauthorized/i.test(msg))
+      if (/invalid|unauthorized|wrong|not found/i.test(msg)) {
         setErrors({ emailOrUsername: "Invalid credentials" });
-      else setGeneralError(msg);
+      } else {
+        setGeneralError(msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -55,8 +66,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onSwitchToSignup
               type="text"
               placeholder="Email or Username"
               value={formData.emailOrUsername}
-              onChange={(e) => setFormData({ ...formData, emailOrUsername: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-lg ${errors.emailOrUsername ? "border-red-500" : ""}`}
+              onChange={handleChange("emailOrUsername")}
+              className={`w-full px-3 py-2 border rounded-lg ${
+                errors.emailOrUsername ? "border-red-500" : ""
+              }`}
               disabled={isLoading}
             />
             {errors.emailOrUsername && (
@@ -69,8 +82,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ open, onClose, onSwitchToSignup
               type="password"
               placeholder="Password"
               value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-lg ${errors.password ? "border-red-500" : ""}`}
+              onChange={handleChange("password")}
+              className={`w-full px-3 py-2 border rounded-lg ${
+                errors.password ? "border-red-500" : ""
+              }`}
               disabled={isLoading}
             />
             {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}

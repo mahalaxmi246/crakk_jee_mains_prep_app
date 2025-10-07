@@ -25,6 +25,13 @@ const Navbar: React.FC = () => {
     }
   }, [user]);
 
+  // ✅ NEW: allow other pages to open this same LoginModal
+  useEffect(() => {
+    const open = () => setShowLoginModal(true);
+    window.addEventListener("OPEN_GLOBAL_LOGIN", open as EventListener);
+    return () => window.removeEventListener("OPEN_GLOBAL_LOGIN", open as EventListener);
+  }, []);
+
   return (
     <nav className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b border-gray-100 z-50 h-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

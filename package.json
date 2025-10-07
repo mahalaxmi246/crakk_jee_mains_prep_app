@@ -11,13 +11,20 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
+    "axios": "^1.12.2",
+    "katex": "^0.16.23",
     "lucide-react": "^0.541.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.8.2"
+    "react-katex": "^3.1.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.8.2",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@types/katex": "^0.16.7",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

@@ -7,6 +7,10 @@ from sqlalchemy import text
 from database import Base, engine
 from deps import get_db
 from routes.auth import router as auth_router
+from routes.quotes import router as quotes_router 
+from routes.dpp import router as dpp_router                # student DPP endpoints
+from routes.admin_dpp import router as admin_dpp_router    # admin-only create/schedule
+from routes.comments import router as comments_router  
 
 # Auto create tables (dev only)
 Base.metadata.create_all(bind=engine)
@@ -36,3 +40,11 @@ def health(db: Session = Depends(get_db)):
 
 # ✅ Mount Auth Router
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+#mount quotes under /api
+
+app.include_router(quotes_router, prefix="/api", tags=["Quotes"])
+
+app.include_router(dpp_router,     prefix="/dpp",        tags=["DPP"])
+app.include_router(admin_dpp_router, prefix="/admin-dpp", tags=["Admin DPP"])
+app.include_router(comments_router, prefix="/comments",  tags=["Comments"])

@@ -14,6 +14,16 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path alias */
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"]
+    },
+
+    /* Interop & QoL */
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
