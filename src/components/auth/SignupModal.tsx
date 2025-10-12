@@ -1,7 +1,7 @@
 // src/components/auth/SignupModal.tsx
 import React, { useState } from "react";
 import Modal from "../ui/Modal";
-import { authHandlers } from "../../lib/authHandlers";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface SignupModalProps {
   open: boolean;
@@ -10,8 +10,9 @@ interface SignupModalProps {
 }
 
 const SignupModal: React.FC<SignupModalProps> = ({ open, onClose, onSwitchToLogin }) => {
+  const { signUpWithEmail, signInWithGoogle } = useAuth();
+
   const [formData, setFormData] = useState({
-    name: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -31,6 +32,15 @@ const SignupModal: React.FC<SignupModalProps> = ({ open, onClose, onSwitchToLogi
     return Object.keys(next).length === 0;
   };
 
+  const showFriendlyError = (code?: string, message?: string) => {
+    switch (code) {
+      case "auth/email-already-in-use":
+        return "⚠️ Account already exists. Please log in to continue.";
+      default:
+        return message || "Signup failed";
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError("");
@@ -38,29 +48,42 @@ const SignupModal: React.FC<SignupModalProps> = ({ open, onClose, onSwitchToLogi
 
     setIsLoading(true);
     try {
-      const username =
-        formData.name?.trim() ||
-        (formData.email.includes("@") ? formData.email.split("@")[0] : formData.email);
+      await signUpWithEmail(formData.email, formData.password);
 
-      await authHandlers.register({
-        username,
-        email: formData.email,
-        password: formData.password,
-      });
-
-      // ✅ Close signup and open login modal (no auto login)
+      alert("✅ Account created successfully. Please log in to continue.");
       onClose();
-      onSwitchToLogin(); // 👈 this opens the login modal right after signup
+      onSwitchToLogin();
+      setFormData({ email: "", password: "", confirmPassword: "" });
+    } catch (err: any) {
+      const msg = showFriendlyError(err?.code, err?.message);
+      if (err?.code === "auth/email-already-in-use") {
+        alert(msg);
+        onClose();
+        onSwitchToLogin();
+      } else {
+        setGeneralError(msg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      setFormData({ name: "", email: "", password: "", confirmPassword: "" });
-      setErrors({});
-
-      // Optional: Show a toast/alert
-      alert("Account created successfully. Please log in to continue.");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Signup failed";
-      if (/exists/i.test(msg)) setErrors({ email: msg });
-      else setGeneralError(msg);
+  const handleGoogleSignup = async () => {
+    setIsLoading(true);
+    setGeneralError("");
+    try {
+      await signInWithGoogle("signup");
+      alert("✅ Account created successfully with Google. You can log in now.");
+      onClose();
+      onSwitchToLogin();
+    } catch (err: any) {
+      if (err?.code === "auth/email-already-in-use") {
+        alert("⚠️ Account already exists. Please log in to continue.");
+        onClose();
+        onSwitchToLogin();
+      } else {
+        setGeneralError(err?.message || "Google signup failed");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -71,64 +94,63 @@ const SignupModal: React.FC<SignupModalProps> = ({ open, onClose, onSwitchToLogi
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
           <input
-            type="text"
-            placeholder="Name (optional)"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="w-full px-3 py-2 border rounded-lg"
+            type="email"
+            placeholder="Email"
+            value={formData.email}
+            onChange={(e) => setFormData((s) => ({ ...s, email: e.target.value }))}
+            className={`w-full px-3 py-2 border rounded-lg ${errors.email ? "border-red-500" : ""}`}
             disabled={isLoading}
           />
+          {errors.email && <p className="text-sm text-red-600">{errors.email}</p>}
 
-          <div>
-            <input
-              type="email"
-              placeholder="Email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-lg ${errors.email ? "border-red-500" : ""}`}
-              disabled={isLoading}
-            />
-            {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
-          </div>
+          <input
+            type="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={(e) => setFormData((s) => ({ ...s, password: e.target.value }))}
+            className={`w-full px-3 py-2 border rounded-lg ${errors.password ? "border-red-500" : ""}`}
+            disabled={isLoading}
+          />
+          {errors.password && <p className="text-sm text-red-600">{errors.password}</p>}
 
-          <div>
-            <input
-              type="password"
-              placeholder="Password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-lg ${errors.password ? "border-red-500" : ""}`}
-              disabled={isLoading}
-            />
-            {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
-          </div>
-
-          <div>
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-lg ${
-                errors.confirmPassword ? "border-red-500" : ""
-              }`}
-              disabled={isLoading}
-            />
-            {errors.confirmPassword && (
-              <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
-            )}
-          </div>
+          <input
+            type="password"
+            placeholder="Confirm Password"
+            value={formData.confirmPassword}
+            onChange={(e) => setFormData((s) => ({ ...s, confirmPassword: e.target.value }))}
+            className={`w-full px-3 py-2 border rounded-lg ${
+              errors.confirmPassword ? "border-red-500" : ""
+            }`}
+            disabled={isLoading}
+          />
+          {errors.confirmPassword && (
+            <p className="text-sm text-red-600">{errors.confirmPassword}</p>
+          )}
 
           {generalError && <p className="text-sm text-red-600">{generalError}</p>}
         </div>
 
-        <div className="mt-6">
+        <div className="mt-6 space-y-3">
           <button
             type="submit"
             disabled={isLoading}
             className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 disabled:opacity-50"
           >
             {isLoading ? "Creating account..." : "Create account"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGoogleSignup}
+            disabled={isLoading}
+            className="w-full border border-gray-300 py-2 px-4 rounded-lg hover:bg-gray-50 flex justify-center items-center gap-2"
+          >
+            <img
+              src="https://www.svgrepo.com/show/355037/google.svg"
+              alt="Google"
+              className="w-5 h-5"
+            />
+            <span>Sign up with Google</span>
           </button>
         </div>
 

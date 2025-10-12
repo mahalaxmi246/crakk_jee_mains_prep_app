@@ -1,24 +1,17 @@
-// src/lib/api.ts
-import axios, { InternalAxiosRequestConfig } from "axios";
+// src/lib/api.ts ✅
+import axios from "axios";
+import { getAuth } from "firebase/auth";
 
-export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-export const api = axios.create({
-  baseURL: API_BASE,
+export const api = axios.create({ 
+  baseURL: "http://localhost:8000/api"  // 👈 added /api prefix
 });
 
-// ✅ Always attach the *latest* token before every request
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem("access_token");
-
-  // make sure headers object exists
-  config.headers = config.headers || {};
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  } else {
-    delete (config.headers as any).Authorization;
+api.interceptors.request.use(async (config) => {
+  const user = getAuth().currentUser;
+  if (user) {
+    const idToken = await user.getIdToken();
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${idToken}`;
   }
-
   return config;
 });

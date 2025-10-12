@@ -1,5 +1,7 @@
-// src/lib/authHandlers.ts
-const API_BASE_URL = "http://127.0.0.1:8000";
+// src/lib/authHandlers.ts ✅ UPDATED
+
+// ✅ Prefer env; fallback to local dev with /api
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
 
 /** ---- Token helpers (localStorage) ---- */
 const TOKEN_KEY = "access_token";
@@ -29,7 +31,16 @@ export type UserDTO = {
   stream?: string | null;
 };
 
-/** ---- API handlers ---- */
+/** ---- Auth Headers Helper ---- */
+function withAuthHeaders(extra?: Record<string, string>) {
+  const token = getAccessToken();
+  return {
+    ...(extra || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** ---- Auth Handlers ---- */
 export const authHandlers = {
   async register(data: RegisterPayload): Promise<UserDTO> {
     const res = await fetch(`${API_BASE_URL}/auth/register`, {
@@ -49,7 +60,7 @@ export const authHandlers = {
     data: LoginPayload
   ): Promise<{ access_token?: string; token_type?: string }> {
     const form = new URLSearchParams();
-    form.append("username", data.emailOrUsername); // backend accepts username OR email
+    form.append("username", data.emailOrUsername);
     form.append("password", data.password);
 
     const res = await fetch(`${API_BASE_URL}/auth/token`, {
@@ -64,16 +75,15 @@ export const authHandlers = {
     }
 
     const json = await res.json();
-    // Persist token so /auth/me can succeed
     if (json?.access_token) setAccessToken(json.access_token);
     return json;
   },
 
   async logout(): Promise<boolean> {
-    // Best-effort server logout; always clear local token.
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: "POST",
+        headers: withAuthHeaders(),
         credentials: "include",
       });
     } finally {
@@ -83,13 +93,30 @@ export const authHandlers = {
   },
 
   async getUser(): Promise<UserDTO | null> {
-    const token = getAccessToken();
     const res = await fetch(`${API_BASE_URL}/auth/me`, {
       method: "GET",
+      headers: withAuthHeaders(),
       credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     if (!res.ok) return null;
     return res.json();
   },
 };
+
+/** ---- Firebase → Backend JWT exchange ---- */
+export async function exchangeFirebaseIdToken(idToken: string) {
+  const res = await fetch(`${API_BASE_URL}/auth/firebase`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id_token: idToken }),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    setAccessToken(undefined);
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Firebase exchange failed");
+  }
+  const json = await res.json();
+  if (json?.access_token) setAccessToken(json.access_token);
+  return json;
+}

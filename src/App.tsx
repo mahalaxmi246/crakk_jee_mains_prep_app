@@ -1,11 +1,17 @@
 // src/App.tsx
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useParams,
+} from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import ScrollToTop from "./components/ScrollToTop";
 
-// ✅ Prefer importing modules without file extensions
+// Pages (keep your existing ones)
 import Home from "./pages/Home";
 import Chatbots from "./pages/Chatbots";
 import Contests from "./pages/Contests";
@@ -25,11 +31,19 @@ import ContestDetailedReportPage from "./pages/ContestDetailedReportPage";
 import AuthCallback from "./pages/AuthCallback";
 import Profile from "./pages/Profile";
 
+// 🔐 Firebase auth layer
 import { AuthProvider } from "./contexts/AuthContext";
+import VerifiedRoute from "./routes/VerifiedRoute";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 
+// helper component to handle dynamic redirect correctly
+const DailyQuestionRedirect: React.FC = () => {
+  const { subject } = useParams();
+  const dest = subject ? `/dpp/${subject}/daily` : "/";
+  return <Navigate to={dest} replace />;
+};
 
-
-function App() {
+const App: React.FC = () => {
   return (
     <AuthProvider>
       <Router>
@@ -40,10 +54,9 @@ function App() {
             <Routes>
               {/* Core */}
               <Route path="/" element={<Home />} />
-              <Route path="/profile" element={<Profile />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
 
-              {/* Chatbots */}
+              {/* Public pages */}
               <Route path="/chatbots" element={<Chatbots />} />
               <Route path="/chatbots/:type" element={<ChatInterface />} />
               <Route path="/chatbots/generator" element={<ChatInterface />} />
@@ -51,37 +64,47 @@ function App() {
               <Route path="/chatbots/summarizer" element={<ChatInterface />} />
               <Route path="/chatbots/planner" element={<ChatInterface />} />
 
-              {/* Contests */}
               <Route path="/contests" element={<Contests />} />
               <Route path="/contests/:contestId/test" element={<ContestTestPage />} />
               <Route path="/contests/:contestId/summary" element={<ContestSummaryPage />} />
-              <Route path="/contests/:contestId/detailed-report" element={<ContestDetailedReportPage />} />
+              <Route
+                path="/contests/:contestId/detailed-report"
+                element={<ContestDetailedReportPage />}
+              />
               <Route path="/contests/:contestId/join" element={<ContestTestPage />} />
 
-              {/* Refer */}
               <Route path="/refer-earn" element={<ReferEarn />} />
 
               {/* DPP (topic/chapter navigation) */}
               <Route path="/dpp/:subject" element={<DPPPage />} />
               <Route path="/dpp/:subject/:topic" element={<ChapterListPage />} />
               <Route path="/dpp/:subject/:topic/:chapter" element={<QuestionListPage />} />
-              <Route path="/dpp/:subject/:topic/:chapter/review" element={<ChapterReviewPage />} />
+              <Route
+                path="/dpp/:subject/:topic/:chapter/review"
+                element={<ChapterReviewPage />}
+              />
 
               {/* PYQ */}
               <Route path="/pyq/:subject" element={<PYQPage />} />
               <Route path="/pyq/:subject/:chapter" element={<PYQChapterPage />} />
 
-              {/* Daily Question (recommended path) */}
+              {/* Daily Question */}
               <Route path="/dpp/:subject/daily" element={<DailyQuestionPage />} />
 
-              {/* Back-compat: redirect old path to the new one */}
-              <Route
-                path="/daily-question/:subject"
-                element={<Navigate to="/dpp/:subject/daily" replace />}
-              />
+              {/* Back-compat redirect (fixes the old literal :subject) */}
+              <Route path="/daily-question/:subject" element={<DailyQuestionRedirect />} />
 
               {/* Individual question page */}
               <Route path="/question/:questionId" element={<QuestionPage />} />
+
+              {/* 🔐 Verified-only routes */}
+              <Route element={<VerifiedRoute />}>
+                <Route path="/profile" element={<Profile />} />
+                {/* add any other protected routes inside this block */}
+              </Route>
+
+              {/* Email verification page (shown when logged-in but unverified) */}
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
 
               {/* 404 → home */}
               <Route path="*" element={<Navigate to="/" replace />} />
@@ -91,6 +114,6 @@ function App() {
       </Router>
     </AuthProvider>
   );
-}
+};
 
 export default App;

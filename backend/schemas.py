@@ -1,59 +1,44 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional, Literal, Dict, List
 from datetime import date, datetime
 
-# ===============================
-# ✅ USER SCHEMAS
-# ===============================
+# ✅ Import your Enums from models.py
+from models import SubjectEnum, DifficultyEnum
 
-class UserCreate(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
+# ===============================
+# ✅ USER (Firebase-backed)
+# ===============================
 
 class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
-    username: str
     email: EmailStr
+    display_name: Optional[str] = None
+    photo_url: Optional[str] = None
     class_level: Optional[str] = None
     stream: Optional[str] = None
-    is_admin: bool  # expose to frontend
+    is_admin: bool
 
-    class Config:
-        from_attributes = True  # Pydantic v2
-
-class TokenPair(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
 
 class UpdateMe(BaseModel):
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    class_level: Optional[str] = None  # "11" | "12" | "dropper"
-    stream: Optional[str] = None       # e.g. "JEE Mains"
+    display_name: Optional[str] = None
+    photo_url: Optional[str] = None
+    class_level: Optional[str] = None
+    stream: Optional[str] = None
 
-class ChangePassword(BaseModel):
-    current_password: str
-    new_password: str
 
 # ===============================
 # 🧠 DPP SCHEMAS
 # ===============================
 
-# literals used for validation
-SubjectLiteral = Literal["math", "physics", "chemistry"]
-DifficultyLiteral = Literal["easy", "medium", "hard"]
-
-# ---- Admin: Create Problem ----
 class ProblemCreate(BaseModel):
-    subject: SubjectLiteral
+    model_config = ConfigDict(use_enum_values=True)
+
+    subject: SubjectEnum
     topic: str
     chapter: str
-    difficulty: DifficultyLiteral
+    difficulty: DifficultyEnum
 
     question_tex: str
     option_a_tex: str
@@ -65,83 +50,56 @@ class ProblemCreate(BaseModel):
     hint_tex: Optional[str] = None
     solution_tex: Optional[str] = None
 
-# ---- Admin: Schedule Daily Problem (single) ----
-class DailyScheduleIn(BaseModel):
-    date: date
-    subject: SubjectLiteral
-    problem_id: int
 
-# ---- Admin: Bulk schedule ----
-class BulkScheduleIn(BaseModel):
-    date: date
-    items: List[DailyScheduleIn]
-
-class BulkScheduledItem(BaseModel):
-    subject: SubjectLiteral
-    problem_id: int
-
-class BulkScheduleOut(BaseModel):
-    date: date
-    scheduled: List[BulkScheduledItem]
-
-# ---- Stats ----
 class ProblemStats(BaseModel):
     attempted: int
     solved: int
-    accuracy: float
+    accuracy: float  # 0.0 .. 1.0
 
-# ---- Student: Today problem ----
+
 class ProblemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
     id: int
-    subject: SubjectLiteral
+    subject: SubjectEnum
     topic: str
     chapter: str
-    difficulty: DifficultyLiteral
+    difficulty: DifficultyEnum
     question_tex: str
-    options: Dict[str, str]  # { "A": "...", "B": "...", ... }
+    options: Dict[Literal["A", "B", "C", "D"], str]
     stats: ProblemStats
     likes_count: int
     has_liked: bool
     has_answered: bool
 
-    class Config:
-        from_attributes = True
+    # ✅ New fields to restore state after refresh
+    my_choice: Optional[Literal["A", "B", "C", "D"]] = None
+    is_correct: Optional[bool] = None
+    correct_option: Optional[Literal["A", "B", "C", "D"]] = None
 
-# ---- Student: Answer ----
-class AnswerIn(BaseModel):
-    problem_id: int
-    chosen_option: Literal["A", "B", "C", "D"]
 
-class AnswerOut(BaseModel):
-    is_correct: bool
-    correct_option: Literal["A", "B", "C", "D"]
+class DailyProblemOut(BaseModel):
+    problem: Optional[ProblemOut] = None
 
-# ---- Comments ----
-class CommentIn(BaseModel):
-    text: str
-    parent_id: Optional[int] = None
 
-class CommentOut(BaseModel):
-    id: int
-    user_id: int
-    text: str
-    parent_id: Optional[int] = None
-    created_at: datetime
+# ---- Answering ----
+class SubmitAnswerIn(BaseModel):
+    selectedOption: Optional[Literal["A", "B", "C", "D"]] = None
+    chosen_option: Optional[Literal["A", "B", "C", "D"]] = None
 
-    class Config:
-        from_attributes = True
+    def selected(self) -> Optional[str]:
+        return self.selectedOption or self.chosen_option
 
-# ---- Today bundle across all subjects ----
-class TodaySubjectBundle(BaseModel):
-    subject: SubjectLiteral
-    problem: Optional[ProblemOut] = None  # None if not scheduled
 
-class TodayAllOut(BaseModel):
-    date: date
-    items: List[TodaySubjectBundle]
+class SubmitAnswerOut(BaseModel):
+    isCorrect: bool
+    correctOption: Literal["A", "B", "C", "D"]
+    attemptedCount: Optional[int] = None
+    solvedCount: Optional[int] = None
+    accuracy: Optional[float] = None
 
-class HintOut(BaseModel):
-    hint_tex: Optional[str] = None
 
-class SolutionOut(BaseModel):
-    solution_tex: Optional[str] = None
+# ---- Likes ----
+class LikeResponse(BaseModel):
+    likeCount: int
+    hasLiked: bool

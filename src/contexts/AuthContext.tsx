@@ -2,162 +2,168 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
-  useCallback,
-  useRef,
 } from "react";
-import axios from "axios";
 import {
-  authHandlers,
-  UserDTO,
-  getAccessToken,
-  setAccessToken,
-} from "../lib/authHandlers";
+  User,
+  onAuthStateChanged,
+  signOut,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  fetchSignInMethodsForEmail,
+} from "firebase/auth";
+import { auth, googleProvider } from "../lib/firebase";
+import { exchangeFirebaseIdToken } from "../lib/authHandlers";
 
 type AuthContextType = {
-  user: UserDTO | null;
+  user: User | null;
   loading: boolean;
-
-  // auth actions
-  login: (emailOrUsername: string, password: string) => Promise<void>;
+  isVerified: boolean;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: (mode?: "login" | "signup") => Promise<void>;
+  resendVerification: () => Promise<void>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
-
-  // login modal + gating helpers
-  loginModalOpen: boolean;
-  openLoginModal: () => void;
-  closeLoginModal: () => void;
-  /** Run an action, but if not logged in, show login and run it after login succeeds */
-  requireAuth: (action: () => void | Promise<void>) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
-  return ctx;
-};
-
-type Props = { children: React.ReactNode };
-
-const applyAxiosAuthHeader = () => {
-  const token = getAccessToken();
-  if (token) {
-    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  } else {
-    delete axios.defaults.headers.common["Authorization"];
-  }
-};
-
-export const AuthProvider: React.FC<Props> = ({ children }) => {
-  const [user, setUser] = useState<UserDTO | null>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // central login modal state
-  const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const afterLoginActionRef = useRef<null | (() => void | Promise<void>)>(null);
+  // 🟡 NEW: Firebase → Backend token exchange here
+ // src/contexts/AuthContext.tsx (excerpt of the effect)
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    setUser(u);
+    setLoading(false);
 
-  const openLoginModal = () => setLoginModalOpen(true);
-  const closeLoginModal = () => setLoginModalOpen(false);
-
-  const refreshUser = useCallback(async () => {
-    try {
-      const u = await authHandlers.getUser();
-      setUser(u);
-    } catch {
-      setUser(null);
-    } finally {
-      // keep axios header aligned with current token
-      applyAxiosAuthHeader();
+    if (!u) {
+      localStorage.removeItem("access_token");
+      return;
     }
-  }, []);
 
-  useEffect(() => {
-    // On mount, align axios header and (if token exists) fetch current user
-    (async () => {
-      setLoading(true);
-      applyAxiosAuthHeader();
-      const token = getAccessToken();
-      if (token) {
-        await refreshUser();
-      } else {
-        setUser(null);
+    try {
+      // 🔥 force-refresh so it can't be stale
+      const idToken = await u.getIdToken(true);
+      console.log("[Auth] sending Firebase idToken prefix:", idToken.slice(0, 20));
+      await exchangeFirebaseIdToken(idToken);
+      console.log("✅ Firebase token exchanged successfully");
+    } catch (err) {
+      console.error("❌ Firebase → backend JWT exchange failed:", err);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+
+
+  const isVerified = useMemo(() => !!user?.emailVerified, [user]);
+
+  const signUpWithEmail = async (email: string, password: string) => {
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+    if (methods.length > 0) {
+      const provider = methods.includes("password") ? "email & password" : methods[0];
+      const e = new Error(`Account already exists with ${provider}.`);
+      (e as any).code = "auth/email-already-in-use";
+      throw e;
+    }
+
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await sendEmailVerification(cred.user);
+    await signOut(auth);
+  };
+
+  const signInWithEmail = async (email: string, password: string) => {
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+    if (methods.length === 0) {
+      const e = new Error("No account found. Please sign up first.");
+      (e as any).code = "auth/user-not-found";
+      throw e;
+    }
+
+    if (!methods.includes("password")) {
+      const e = new Error(
+        `This account is registered using ${methods[0]}. Please use that method to log in.`
+      );
+      (e as any).code = "auth/wrong-signin-method";
+      throw e;
+    }
+
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+
+    if (!cred.user.emailVerified) {
+      await signOut(auth);
+      const e = new Error("Please verify your email before logging in.");
+      (e as any).code = "auth/email-not-verified";
+      throw e;
+    }
+  };
+
+  const signInWithGoogle = async (mode: "login" | "signup" = "login") => {
+    const cred = await signInWithPopup(auth, googleProvider);
+    const email = cred.user.email!;
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+
+    if (mode === "signup") {
+      if (methods.length > 0 && !methods.includes("google.com")) {
+        await signOut(auth);
+        const e = new Error("Account already exists. Please log in.");
+        (e as any).code = "auth/email-already-in-use";
+        throw e;
       }
-      setLoading(false);
-    })();
-  }, [refreshUser]);
+      return;
+    }
 
-  const login = async (emailOrUsername: string, password: string) => {
-    await authHandlers.login({ emailOrUsername, password });
-    // token saved inside authHandlers.login; align header + fetch user
-    applyAxiosAuthHeader();
-    await refreshUser();
-    setLoginModalOpen(false);
+    if (mode === "login") {
+      if (methods.length === 0) return;
+      if (!methods.includes("google.com")) {
+        await signOut(auth);
+        const e = new Error(
+          `This account is registered using ${methods[0]}. Please use that method.`
+        );
+        (e as any).code = "auth/wrong-signin-method";
+        throw e;
+      }
+    }
+  };
+
+  const resendVerification = async () => {
+    if (!auth.currentUser) throw new Error("Not signed in.");
+    await sendEmailVerification(auth.currentUser);
   };
 
   const logout = async () => {
-    await authHandlers.logout();
-    setAccessToken(undefined);
-    setUser(null);
-    applyAxiosAuthHeader();
+    await signOut(auth);
+    localStorage.removeItem("access_token");
   };
-
-  /** Gate an action behind auth; remember it and execute after login succeeds */
-  const requireAuth = (action: () => void | Promise<void>) => {
-    if (!user) {
-      afterLoginActionRef.current = action;
-      setLoginModalOpen(true);
-      return;
-    }
-    action();
-  };
-
-  // When user changes from null -> object (i.e., login success), run pending action once
-  const prevUserRef = useRef<UserDTO | null>(null);
-  useEffect(() => {
-    const previously = prevUserRef.current;
-    prevUserRef.current = user;
-    if (!previously && user && afterLoginActionRef.current) {
-      const fn = afterLoginActionRef.current;
-      afterLoginActionRef.current = null;
-      // run after a microtask to let modal close cleanly
-      Promise.resolve().then(() => void fn());
-    }
-  }, [user]);
-
-  // Optional: if any request gets 401, reopen the login modal
-  useEffect(() => {
-    const id = axios.interceptors.response.use(
-      (r) => r,
-      (err) => {
-        if (err?.response?.status === 401) {
-          setUser(null);
-          setAccessToken(undefined);
-          applyAxiosAuthHeader();
-          setLoginModalOpen(true);
-        }
-        return Promise.reject(err);
-      }
-    );
-    return () => axios.interceptors.response.eject(id);
-  }, []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
-        login,
+        isVerified,
+        signUpWithEmail,
+        signInWithEmail,
+        signInWithGoogle,
+        resendVerification,
         logout,
-        refreshUser,
-        loginModalOpen,
-        openLoginModal,
-        closeLoginModal,
-        requireAuth,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
 };
